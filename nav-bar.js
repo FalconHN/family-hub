@@ -1,8 +1,8 @@
 // Family Hub - zajednicka navigacija za prelazak izmedju aplikacija.
 // Ubaci <script src="nav-bar.js?v=20260821"></script> pred kraj <body> u svaku app stranicu.
-// Na telefonu (uzi ekran): traka na dnu. Na kompjuteru (siri ekran, >=768px): bocna traka sa leve strane.
+// Na telefonu (uzi ekran): traka na dnu. Na kompjuteru (siri ekran, >=768px): bocna traka sa lijeve strane.
 // Boje se automatski prilagodjavaju pozadini stranice (tamna ili svijetla tema).
-// Kad se doda nova aplikacija: izmeni APPS niz ispod (jedno mesto za sve stranice).
+// Kad se doda nova aplikacija: izmijeni APPS niz ispod (jedno mjesto za sve stranice).
 // NAV_VER: podigni ovaj broj/datum pri svakom deployu. Dodaje se kao ?v= na linkove
 // izmedju stranica, sto tjera browser da uvijek povuce svjezu verziju umjesto stare
 // keširane (npr. Opera je znala da posluzi zastarjelu stranicu bez ovoga).

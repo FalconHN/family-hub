@@ -878,7 +878,7 @@ function subscribeToChild(childId) {
 
 // Napomena vezana za datum (npr. "kontrolni 15.09.") se automatski uklanja čim taj datum prođe -
 // čas, vrijeme, predmet i učionica ostaju netaknuti, jer se čas i dalje ponavlja svake sedmice.
-// Nema pozadinskog servera, pa se ovo dešava čim neko (roditelj ili dijete) sledeći put otvori
+// Nema pozadinskog servera, pa se ovo dešava čim neko (roditelj ili dijete) sljedeći put otvori
 // aplikaciju poslije tog datuma: lokalno se odmah sakriva za sve, a u bazu upisuje samo roditelj.
 function sweepExpiredNapomene() {
   if (!scheduleData) return;
@@ -1606,7 +1606,7 @@ function addEntry(field, addRowElId) {
     payload.smjene[selectedSmjena].casovi[selectedDayCasovi] = updated;
     db.collection("raspored").doc(selectedChildId).set(payload, { merge: true });
 
-    // Rucno cistimo polja za sledeci unos (umjesto da se cijela forma ponovo gradi) - tako
+    // Rucno cistimo polja za sljedeci unos (umjesto da se cijela forma ponovo gradi) - tako
     // upis ne nestaje ako u medjuvremenu stigne osvjezenje liste predmeta iz pozadine.
     rememberPredmet(naziv);
     const n = parseInt(brojEl.value, 10);
