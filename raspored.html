@@ -1207,6 +1207,14 @@ function formatCasTime(e) {
   return e.vrijeme || ""; // fallback za stavke unešene prije uvodjenja Od/Do polja
 }
 
+// Broj časa u tekst. Nula znaci predcas (cas prije prvog casa) - tada se ne pise "0. čas".
+function casBrojLabel(broj) {
+  const t = String(broj == null ? "" : broj).trim();
+  if (t === "") return "";
+  if (parseFloat(t) === 0) return "Predčas";
+  return t + ". čas";
+}
+
 function nextCasBroj(entries) {
   let max = 0;
   entries.forEach((e) => {
@@ -1272,7 +1280,7 @@ function renderWeekGrid() {
       indexed.length === 0
         ? '<div class="week-day-empty">Nema časova.</div>'
         : indexed.map(({ e, i }) => {
-            const brojPart = e.broj ? e.broj + ". čas" : "";
+            const brojPart = casBrojLabel(e.broj);
             const timePart = formatCasTime(e);
             const timeLine = [brojPart, timePart].filter(Boolean).join(" · ");
             // Učionica i nastavnik uvijek dobijaju SVOJ red ispod predmeta (isti stil, .week-cas-room
@@ -1459,7 +1467,7 @@ function renderDetailModal(dayKey, idx, mode) {
         '<button type="button" class="detail-close" id="detailCloseBtn" aria-label="Zatvori">' + xIcon() + '</button>' +
       '</div>' +
       '<div class="detail-edit-row">' +
-        '<input type="number" min="1" placeholder="Čas" title="Broj časa" value="' + escapeHtml(e.broj || "") + '" id="detailEdit_broj" />' +
+        '<input type="number" min="0" placeholder="Čas" title="Broj časa — upiši 0 za predčas" value="' + escapeHtml(e.broj || "") + '" id="detailEdit_broj" />' +
         '<input type="time" title="Od" value="' + escapeHtml(e.od || "") + '" id="detailEdit_od" />' +
         '<input type="time" title="Do" value="' + escapeHtml(e.do || "") + '" id="detailEdit_do" />' +
       '</div>' +
@@ -1503,7 +1511,7 @@ function renderDetailModal(dayKey, idx, mode) {
     return;
   }
 
-  const brojPart = e.broj ? e.broj + ". čas" : "";
+  const brojPart = casBrojLabel(e.broj);
   const timePart = formatCasTime(e);
   const timeLine = [brojPart, timePart].filter(Boolean).join(" · ") || "–";
 
@@ -1588,7 +1596,7 @@ function ensureCasoviAddRowSkeleton(addRowEl, addRowElId, entries) {
       '<button type="button" class="manage-link" id="' + addRowElId + '_toggleManage"></button>' +
     '</div>' +
     '<div id="' + addRowElId + '_managePanelWrap"></div>' +
-    '<input type="number" min="1" class="broj-input" placeholder="Čas" title="Broj časa" value="' + escapeHtml(nextCasBroj(entries)) + '" id="' + addRowElId + '_broj" />' +
+    '<input type="number" min="0" class="broj-input" placeholder="Čas" title="Broj časa — upiši 0 za predčas" value="' + escapeHtml(nextCasBroj(entries)) + '" id="' + addRowElId + '_broj" />' +
     '<input type="time" class="od-do-input" title="Od" id="' + addRowElId + '_od" />' +
     '<input type="time" class="od-do-input" title="Do" id="' + addRowElId + '_do" />' +
     '<div class="autocomplete-wrap" id="' + addRowElId + '_nameWrap">' +
