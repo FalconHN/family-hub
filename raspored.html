@@ -46,45 +46,48 @@
   /* Oznaka razreda i odjeljenja - stoji u vrhu desno, u boji izabranog djeteta.
      Roditelj je klikom otvara i mijenja; dijete je vidi ali ne dira. */
   .razred-badge {
-    flex: 0 0 auto; border: none; background: none; cursor: pointer; font-family: inherit;
+    flex: 0 0 auto; border: none; background: none; font-family: inherit;
     font-weight: 800; font-size: 30px; line-height: 1; letter-spacing: 0.01em;
     padding: 4px 8px; border-radius: 10px; white-space: nowrap; max-width: 42vw;
     overflow: hidden; text-overflow: ellipsis;
   }
-  .razred-badge:hover { background: rgba(0,0,0,0.04); }
-  .razred-badge.readonly { cursor: default; }
-  .razred-badge.readonly:hover { background: none; }
-  .razred-badge.prazan {
-    font-size: 12.5px; font-weight: 700; color: #A8A296; letter-spacing: 0.04em;
-    border: 1px dashed #D6D1C6; padding: 7px 12px; text-transform: uppercase;
+
+  /* Zupcanik u zaglavlju - jedini ulaz u podesavanja rasporeda. Vidi ga samo roditelj.
+     Namjerno je siv i diskretan, da ne odvlaci paznju sa samog rasporeda. */
+  .gear-btn {
+    flex: 0 0 auto; border: none; background: none; cursor: pointer; padding: 6px;
+    border-radius: 9px; line-height: 0; color: #A8A296;
   }
-  .razred-panel {
+  .gear-btn:hover { background: rgba(0,0,0,0.04); color: #007991; }
+  .gear-btn.aktivan { color: #007991; background: rgba(0,121,145,0.08); }
+  .header-right { display: flex; align-items: center; gap: 6px; }
+
+  /* Panel podesavanja: razred i odjeljenje, boje djece, boje dana - sve na jednom mjestu. */
+  .pod-panel {
     background: #fff; border: 1px solid #E6E1D8; border-radius: 12px;
-    padding: 12px 14px; margin: -6px 0 14px; display: flex; align-items: flex-end;
-    gap: 10px; flex-wrap: wrap;
+    padding: 14px; margin: -6px 0 14px;
   }
-  .razred-panel .rp-polje { display: flex; flex-direction: column; gap: 5px; }
-  .razred-panel .rp-oznaka { font-size: 11.5px; font-weight: 700; color: #8A8578; letter-spacing: 0.06em; text-transform: uppercase; }
-  .razred-panel input {
+  .pod-sekcija + .pod-sekcija { border-top: 1px solid #F0EDE5; margin-top: 13px; padding-top: 13px; }
+  .pod-zaglavlje { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .pod-naslov { font-size: 11.5px; font-weight: 700; color: #8A8578; letter-spacing: 0.06em; text-transform: uppercase; }
+  .pod-red { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 9px; }
+  .pod-panel .rp-polje { display: flex; flex-direction: column; gap: 5px; }
+  .pod-panel .rp-oznaka { font-size: 11.5px; font-weight: 700; color: #8A8578; letter-spacing: 0.06em; text-transform: uppercase; }
+  .pod-panel input {
     border: 1px solid #E6E1D8; border-radius: 9px; padding: 8px 10px; font-size: 14px;
     font-family: inherit; color: #0F222B; background: #FAF8F4; width: 92px;
   }
-  .razred-panel input:focus { outline: none; border-color: #007991; }
-  .razred-panel .rp-dugme {
+  .pod-panel input:focus { outline: none; border-color: #007991; }
+  .pod-panel .rp-dugme {
     border: none; border-radius: 9px; padding: 9px 16px; font-family: inherit;
     font-size: 13.5px; font-weight: 700; cursor: pointer; background: #007991; color: #fff;
   }
-  .razred-panel .rp-brisi { background: none; color: #B0524A; padding: 9px 6px; }
-  .razred-panel .rp-napomena { flex: 1 1 100%; font-size: 12px; color: #8A8578; }
-  /* "Boje djece" zivi unutar ovog panela - tanka crta ga odvaja od polja za razred. */
-  .razred-panel .rp-razdjelnik { flex: 1 1 100%; height: 1px; background: #F0EDE5; margin: 4px 0 0; }
-  .razred-panel .rp-boje-red { flex: 1 1 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .razred-panel .rp-boje-oznaka { font-size: 11.5px; font-weight: 700; color: #8A8578; letter-spacing: 0.06em; text-transform: uppercase; }
-  .razred-panel #childColorsPanelWrap { flex: 1 1 100%; }
-  .razred-panel #childColorsPanelWrap .daycolors-manage-panel { margin-bottom: 0; }
+  .pod-panel .rp-brisi { background: none; color: #B0524A; padding: 9px 6px; }
+  .pod-panel .rp-napomena { width: 100%; margin-top: 9px; font-size: 12px; color: #8A8578; }
+  .pod-panel .daycolors-manage-panel { margin: 9px 0 0; }
   @media (min-width: 768px) {
     .razred-badge { font-size: 34px; max-width: 260px; }
-    .razred-panel input { width: 110px; }
+    .pod-panel input { width: 110px; }
   }
 
   .tabs-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 14px; }
@@ -316,22 +319,25 @@
           <div class="sub" id="childLabel"></div>
         </div>
       </div>
-      <button type="button" class="razred-badge" id="razredBadge" style="display:none;"></button>
+      <div class="header-right">
+        <button type="button" class="gear-btn" id="podesavanjaBtn" style="display:none;" aria-label="Podešavanja rasporeda" title="Podešavanja rasporeda">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <span class="razred-badge" id="razredBadge" style="display:none;"></span>
+      </div>
     </div>
-    <div id="razredPanelWrap"></div>
+    <div id="podesavanjaWrap"></div>
 
     <div class="tabs-scroll" id="childTabs" style="display:none;"></div>
     <!-- Dugme "Boje djece" i njegov panel vise ne stoje ovdje. Premjesteni su u panel koji se
          otvara klikom na oznaku razreda (gore desno), da pocetna strana ostane cista. Crtaju
-         se u #razredPanelWrap, unutar renderRazredPanel(). -->
+         se u #podesavanjaWrap, unutar renderPodesavanja(). -->
     <div class="tabs-scroll" id="smjenaTabs" style="display:none;"></div>
 
     <div class="card week-grid-card">
-      <div class="week-grid-card-header">
-        <div class="section-title">Sedmični pregled</div>
-        <button type="button" class="manage-link" id="dayColorsToggle" style="display:none;"></button>
-      </div>
-      <div id="dayColorsPanelWrap"></div>
+      <!-- Dugme "Boje dana" i njegov panel su premjesteni u podesavanja (zupcanik u zaglavlju),
+           da kartica sa rasporedom ostane cista. Crtaju se u renderPodesavanja(). -->
+      <div class="section-title">Sedmični pregled</div>
       <div class="week-grid" id="weekGrid"></div>
     </div>
 
@@ -545,6 +551,7 @@ function initUI() {
   renderChildTabs();
   renderChildLabel();
   renderRazredBadge();
+  wirePodesavanjaDugme();
   renderDaySelectors();
   subscribeToChild(selectedChildId);
   subscribeDayColors();
@@ -652,7 +659,7 @@ function renderDayColorsPanel() {
   const toggleBtn = document.getElementById("dayColorsToggle");
   if (!toggleBtn) return;
   toggleBtn.style.display = role === "parent" ? "inline" : "none";
-  toggleBtn.textContent = dayColorsPanelOpen ? "Zatvori boje" : "Boje dana";
+  toggleBtn.textContent = dayColorsPanelOpen ? "Zatvori" : "Promijeni";
   if (toggleBtn.dataset.bound !== "1") {
     toggleBtn.addEventListener("click", () => {
       dayColorsPanelOpen = !dayColorsPanelOpen;
@@ -829,11 +836,11 @@ function renderChildTabs() {
   wrap.querySelectorAll("button").forEach((btn) => {
     btn.addEventListener("click", () => {
       selectedChildId = btn.dataset.child;
-      razredPanelOpen = false;
+      podesavanjaOpen = false;
       renderChildTabs();
       renderChildLabel();
       renderRazredBadge();
-      renderRazredPanel();
+      renderPodesavanja();
       subscribeToChild(selectedChildId);
     });
   });
@@ -843,7 +850,7 @@ function renderChildTabs() {
 // Čuva se razdvojeno (razred pa odjeljenje) da bi se kasnije moglo sortirati i pretraživati,
 // a prikazuje se spojeno ("V" + "7" = "V7"), onako kako se kod nas i piše.
 let RAZREDI = {};
-let razredPanelOpen = false;
+let podesavanjaOpen = false;
 let unsubscribeRazredi = null;
 
 function subscribeRazredi() {
@@ -852,7 +859,7 @@ function subscribeRazredi() {
     (snap) => {
       RAZREDI = snap.exists ? (snap.data() || {}) : {};
       renderRazredBadge();
-      renderRazredPanel();
+      renderPodesavanja();
     },
     (err) => javiGresku("_razredi", err)
   );
@@ -869,9 +876,9 @@ function setRazred(childId, razred, odjeljenje) {
   const payload = {};
   payload[childId] = { razred: (razred || "").trim(), odjeljenje: (odjeljenje || "").trim() };
   RAZREDI[childId] = payload[childId];
-  razredPanelOpen = false;
+  podesavanjaOpen = false;
   renderRazredBadge();
-  renderRazredPanel();
+  renderPodesavanja();
   db.collection("raspored").doc("_razredi").set(payload, { merge: true });
 }
 
@@ -881,58 +888,81 @@ function renderRazredBadge() {
   const child = CHILDREN.find((c) => c.id === selectedChildId);
   if (!child) { el.style.display = "none"; return; }
   const tekst = razredTekst(selectedChildId);
-  const roditelj = role === "parent";
 
-  // Dijete bez upisanog razreda ne vidi prazno dugme - njemu tu nema šta da stoji.
-  if (!tekst && !roditelj) { el.style.display = "none"; return; }
+  // Oznaka je od sad samo prikaz - unosi se kroz zupcanik (podesavanja). Ako razred nije
+  // upisan, u zaglavlju nema nicega; roditelj ga dodaje preko zupcanika.
+  if (!tekst) { el.style.display = "none"; return; }
 
   el.style.display = "inline-block";
-  el.className = "razred-badge" + (tekst ? "" : " prazan") + (roditelj ? "" : " readonly");
-  el.textContent = tekst || "+ razred";
-  // Boja se uzima od djeteta za koje se razred i unosi - mijenja se sama kad se promijeni boja djeteta.
-  el.style.color = tekst ? child.color : "";
-  el.title = roditelj ? "Klikni da upišeš razred i odjeljenje za " + child.name : "";
+  el.className = "razred-badge";
+  el.textContent = tekst;
+  // Boja se uzima od djeteta za koje je razred upisan - mijenja se sama kad se promijeni boja djeteta.
+  el.style.color = child.color;
+}
 
-  if (el.dataset.bound !== "1") {
-    el.addEventListener("click", () => {
-      if (role !== "parent") return;
-      razredPanelOpen = !razredPanelOpen;
-      renderRazredPanel();
+// Zupcanik vidi samo roditelj. Vezuje se jednom, posto se uloga sazna.
+function wirePodesavanjaDugme() {
+  const btn = document.getElementById("podesavanjaBtn");
+  if (!btn) return;
+  btn.style.display = role === "parent" ? "inline-flex" : "none";
+  if (btn.dataset.bound !== "1") {
+    btn.addEventListener("click", () => {
+      podesavanjaOpen = !podesavanjaOpen;
+      renderPodesavanja();
     });
-    el.dataset.bound = "1";
+    btn.dataset.bound = "1";
   }
 }
 
-function renderRazredPanel() {
-  const wrap = document.getElementById("razredPanelWrap");
+function renderPodesavanja() {
+  const wrap = document.getElementById("podesavanjaWrap");
   if (!wrap) return;
+  const btn = document.getElementById("podesavanjaBtn");
   const child = CHILDREN.find((c) => c.id === selectedChildId);
-  if (!razredPanelOpen || role !== "parent" || !child) {
-    // Kad se panel zatvori, boje se zatvaraju sa njim - da se sljedeci put otvori uredno.
+  if (!podesavanjaOpen || role !== "parent" || !child) {
+    // Kad se panel zatvori, i boje se zatvaraju sa njim - da se sljedeci put otvori uredno.
     childColorsPanelOpen = false;
     childColorPickerFor = null;
+    dayColorsPanelOpen = false;
+    dayColorPickerFor = null;
+    if (btn) btn.classList.remove("aktivan");
     wrap.innerHTML = "";
     return;
   }
+  if (btn) btn.classList.add("aktivan");
   const r = RAZREDI[selectedChildId] || {};
   wrap.innerHTML =
-    '<div class="razred-panel">' +
-      '<div class="rp-polje"><span class="rp-oznaka">Razred</span>' +
-        '<input type="text" id="rpRazred" maxlength="6" placeholder="V" value="' + escapeHtml(r.razred || "") + '" /></div>' +
-      '<div class="rp-polje"><span class="rp-oznaka">Odjeljenje</span>' +
-        '<input type="text" id="rpOdjeljenje" maxlength="6" placeholder="7" value="' + escapeHtml(r.odjeljenje || "") + '" /></div>' +
-      '<button type="button" class="rp-dugme" id="rpSacuvaj">Sačuvaj</button>' +
-      '<button type="button" class="rp-dugme rp-brisi" id="rpBrisi">Ukloni</button>' +
-      '<div class="rp-napomena">Upisuje se posebno za svako dijete. Prikazuje se spojeno, u boji djeteta — npr. V i 7 daju <b>V7</b>.</div>' +
-      '<div class="rp-razdjelnik"></div>' +
-      '<div class="rp-boje-red">' +
-        '<span class="rp-boje-oznaka">Boje djece</span>' +
-        '<button type="button" class="manage-link" id="childColorsToggle" style="display:none;"></button>' +
+    '<div class="pod-panel">' +
+      '<div class="pod-sekcija">' +
+        '<div class="pod-naslov">' + escapeHtml(child.name) + '</div>' +
+        '<div class="pod-red">' +
+          '<div class="rp-polje"><span class="rp-oznaka">Razred</span>' +
+            '<input type="text" id="rpRazred" maxlength="6" placeholder="V" value="' + escapeHtml(r.razred || "") + '" /></div>' +
+          '<div class="rp-polje"><span class="rp-oznaka">Odjeljenje</span>' +
+            '<input type="text" id="rpOdjeljenje" maxlength="6" placeholder="7" value="' + escapeHtml(r.odjeljenje || "") + '" /></div>' +
+          '<button type="button" class="rp-dugme" id="rpSacuvaj">Sačuvaj</button>' +
+          '<button type="button" class="rp-dugme rp-brisi" id="rpBrisi">Ukloni</button>' +
+          '<div class="rp-napomena">Upisuje se posebno za svako dijete. Prikazuje se spojeno, u boji djeteta — npr. V i 7 daju <b>V7</b>.</div>' +
+        '</div>' +
       '</div>' +
-      '<div id="childColorsPanelWrap"></div>' +
+      '<div class="pod-sekcija">' +
+        '<div class="pod-zaglavlje">' +
+          '<span class="pod-naslov">Boje djece</span>' +
+          '<button type="button" class="manage-link" id="childColorsToggle" style="display:none;"></button>' +
+        '</div>' +
+        '<div id="childColorsPanelWrap"></div>' +
+      '</div>' +
+      '<div class="pod-sekcija">' +
+        '<div class="pod-zaglavlje">' +
+          '<span class="pod-naslov">Boje dana</span>' +
+          '<button type="button" class="manage-link" id="dayColorsToggle" style="display:none;"></button>' +
+        '</div>' +
+        '<div id="dayColorsPanelWrap"></div>' +
+      '</div>' +
     '</div>';
-  // Dugme i panel boja su tek sad u dokumentu - popuni ih.
+  // Dugmad i paneli boja su tek sad u dokumentu - popuni ih.
   renderChildColorsPanel();
+  renderDayColorsPanel();
   const polje = document.getElementById("rpRazred");
   if (polje) polje.focus();
   document.getElementById("rpSacuvaj").addEventListener("click", () => {
@@ -942,7 +972,7 @@ function renderRazredPanel() {
   wrap.querySelectorAll("input").forEach((inp) => {
     inp.addEventListener("keydown", (e) => {
       if (e.key === "Enter") document.getElementById("rpSacuvaj").click();
-      if (e.key === "Escape") { razredPanelOpen = false; renderRazredPanel(); }
+      if (e.key === "Escape") { podesavanjaOpen = false; renderPodesavanja(); }
     });
   });
 }
