@@ -595,6 +595,17 @@ function deletePredmetFromList(naziv) {
 // (roditelji i djeca), a mijenjati ih može samo roditelj. Svaka boja se čuva kao par: c (živa
 // boja iz palete - tačkice/ivice kartica) i t (njena tamnija verzija - čitljiv tekst na bijeloj
 // pozadini), da paleta ostane vidno ista kao u pickeru, a vrijeme časa/obaveze ostane čitljivo.
+// Ranije su ove greske bile progutane praznom funkcijom, pa kad djetetu pravila baze
+// zabrane citanje zajednickih dokumenata (_dayColors, _childColors, _razredi) nista se
+// nije vidjelo - boje i razred bi jednostavno ostali na fabrickim vrijednostima.
+function javiGresku(dokument, err) {
+  var kod = (err && err.code) || "nepoznato";
+  console.warn("[Raspored] Ne mogu da procitam raspored/" + dokument + " - " + kod +
+    (kod === "permission-denied"
+      ? ". Pravila baze ne dozvoljavaju ovoj ulozi citanje tog dokumenta."
+      : "."));
+}
+
 function subscribeDayColors() {
   if (unsubscribeDayColors) unsubscribeDayColors();
   unsubscribeDayColors = db.collection("raspored").doc("_dayColors").onSnapshot(
@@ -614,7 +625,7 @@ function subscribeDayColors() {
       renderObavezeWeekGrid();
       renderDayColorsPanel();
     },
-    () => {}
+    (err) => javiGresku("_dayColors", err)
   );
 }
 
@@ -711,7 +722,7 @@ function subscribeChildColors() {
       renderChildColorsPanel();
       renderRazredBadge();
     },
-    () => {}
+    (err) => javiGresku("_childColors", err)
   );
 }
 
@@ -837,7 +848,7 @@ function subscribeRazredi() {
       renderRazredBadge();
       renderRazredPanel();
     },
-    () => {}
+    (err) => javiGresku("_razredi", err)
   );
 }
 

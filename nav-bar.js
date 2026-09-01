@@ -91,6 +91,13 @@
   // verziju trake, bez treptaja svih tabova dok se uloga tek ucita iz baze.
   var cachedRole = null;
   try { cachedRole = localStorage.getItem("fhRole"); } catch (e) {}
+  // Kad uloga JOS NIJE poznata (prvi login na novom uredjaju, ili je obrisan keš browsera),
+  // traka se ranije iscrtavala PUNA - pa je dijete na trenutak vidjelo sve tabove i dugme
+  // Backup, sve dok stranica ne procita ulogu iz baze. Od sad se u tom slucaju crta
+  // najmanja (najbezbjednija) verzija - samo Raspored - a fhApplyRole je odmah dopuni
+  // cim se uloga sazna. Sirenje trake ne otkriva nista, suzavanje bi bilo prekasno.
+  var ulogaPoznata = (cachedRole === "parent" || cachedRole === "child");
+  var pocetnaUloga = ulogaPoznata ? cachedRole : "child";
   function appsForRole(role) {
     return role === "child"
       ? APPS.filter(function (app) { return app.file === "raspored.html"; })
@@ -98,7 +105,7 @@
   }
   // Backup nije dostupan djeci (isto pravilo kao za ostale roditeljske tabove).
   function showBackupForRole(role) { return role !== "child"; }
-  var backupDisplay0 = showBackupForRole(cachedRole) ? "" : "display:none;";
+  var backupDisplay0 = showBackupForRole(pocetnaUloga) ? "" : "display:none;";
 
   var topBar = document.createElement("div");
   topBar.id = "fhNavTop";
@@ -114,13 +121,13 @@
 
   var bottomBar = document.createElement("div");
   bottomBar.id = "fhNavBottom";
-  bottomBar.innerHTML = tabsHtml("bottom", appsForRole(cachedRole));
+  bottomBar.innerHTML = tabsHtml("bottom", appsForRole(pocetnaUloga));
 
   var sideBar = document.createElement("div");
   sideBar.id = "fhNavSide";
   sideBar.innerHTML =
     '<a class="fh-side-header" href="index.html?v=' + NAV_VER + '" aria-label="Početna strana"><img class="fh-side-logo" src="icons/sidebar-logo.png" alt="Family Hub" /><span class="fh-side-title">Family Hub</span></a>' +
-    '<div class="fh-side-tabs">' + tabsHtml("side", appsForRole(cachedRole)) + '</div>' +
+    '<div class="fh-side-tabs">' + tabsHtml("side", appsForRole(pocetnaUloga)) + '</div>' +
     '<div class="fh-side-secondary" id="fhSideSecondary" style="' + backupDisplay0 + '">' + tabsHtml("side", [BACKUP_APP]) + '</div>' +
     '<button class="fh-logout-btn" id="fhLogoutBtn">' +
       '<span class="fh-icon">' + svgIcon(ICONS.logOut) + '</span>' +
@@ -230,8 +237,9 @@
   // --- Ogranicen prikaz za djecu: samo "Raspored" tab, ostalo sakriveno. ---
   // Stranice pozivaju ovo posto saznaju ulogu ulogovanog korisnika (users/{uid} u bazi).
   // Sve dok se ne pozove, prikazuju se svi tabovi (podrazumijevano ponasanje za roditelje).
-  window.fhApplyRole = function (role) {
-    try { localStorage.setItem("fhRole", role); } catch (e) {}
+  var ulogaPrimljena = false;
+
+  function primijeniUlogu(role) {
     var visibleApps = appsForRole(role);
     bottomBar.innerHTML = tabsHtml("bottom", visibleApps);
     var tabsEl = sideBar.querySelector(".fh-side-tabs");
@@ -242,7 +250,23 @@
     if (topBackupEl) topBackupEl.style.display = showBackup ? "" : "none";
     var sideSecondaryEl = document.getElementById("fhSideSecondary");
     if (sideSecondaryEl) sideSecondaryEl.style.display = showBackup ? "" : "none";
+  }
+
+  window.fhApplyRole = function (role) {
+    ulogaPrimljena = true;
+    try { localStorage.setItem("fhRole", role); } catch (e) {}
+    primijeniUlogu(role);
   };
+
+  // Sigurnosna mreza: ako stranica iz nekog razloga nikad ne javi ulogu (npr. upit u bazu
+  // padne zbog nestanka interneta), poslije 6 sekundi vracamo punu traku - da roditelj ne
+  // ostane zaglavljen na jednom tabu. Namjerno NE pamtimo tu ulogu u browseru, jer je to
+  // samo pretpostavka, a ne procitan podatak iz baze.
+  if (!ulogaPoznata) {
+    setTimeout(function () {
+      if (!ulogaPrimljena) primijeniUlogu("parent");
+    }, 6000);
+  }
 })();
 
 // ==== FH_UI: zajednicki "select" i "date" popup widgeti u stilu aplikacije ====
