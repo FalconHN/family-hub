@@ -55,12 +55,18 @@
   /* Zupcanik u zaglavlju - jedini ulaz u podesavanja rasporeda. Vidi ga samo roditelj.
      Namjerno je siv i diskretan, da ne odvlaci paznju sa samog rasporeda. */
   .gear-btn {
-    flex: 0 0 auto; border: none; background: none; cursor: pointer; padding: 6px;
-    border-radius: 9px; line-height: 0; color: #A8A296;
+    flex: 0 0 auto; border: none; background: none; cursor: pointer; padding: 5px;
+    border-radius: 8px; line-height: 0; color: #A8A296; margin-top: 1px;
   }
   .gear-btn:hover { background: rgba(0,0,0,0.04); color: #007991; }
-  .gear-btn.aktivan { color: #007991; background: rgba(0,121,145,0.08); }
-  .header-right { display: flex; align-items: center; gap: 6px; }
+  .gear-btn.aktivan { color: #007991; background: rgba(0,121,145,0.10); }
+  .sub-red { display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+  .sub-red .sub { margin-top: 0; }
+  /* Naslov ostaje u jednom redu - ne lomi se ni na uzim telefonima. */
+  .header-left h1 { white-space: nowrap; }
+  .header-left > div { min-width: 0; }
+  /* Sigurnosna mreza za veoma uske telefone - naslov se malo smanji umjesto da izadje van ekrana. */
+  @media (max-width: 379px) { .header-left h1 { font-size: 23px; } }
 
   /* Panel podesavanja: razred i odjeljenje, boje djece, boje dana - sve na jednom mjestu. */
   .pod-panel {
@@ -71,6 +77,8 @@
   .pod-zaglavlje { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .pod-naslov { font-size: 11.5px; font-weight: 700; color: #8A8578; letter-spacing: 0.06em; text-transform: uppercase; }
   .pod-red { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 9px; }
+  /* Dugmad idu u paru - da "Ukloni" ne ostane samo u novom redu kad se red prelomi. */
+  .pod-akcije { display: flex; align-items: center; gap: 4px; }
   .pod-panel .rp-polje { display: flex; flex-direction: column; gap: 5px; }
   .pod-panel .rp-oznaka { font-size: 11.5px; font-weight: 700; color: #8A8578; letter-spacing: 0.06em; text-transform: uppercase; }
   .pod-panel input {
@@ -316,15 +324,17 @@
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#007991" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="8" y2="18"/><line x1="12" y1="18" x2="12" y2="18"/></svg>
         <div>
           <h1>Raspored časova</h1>
-          <div class="sub" id="childLabel"></div>
+          <!-- Zupcanik stoji u drugom redu, uz ime djeteta. U prvom redu je oduzimao sirinu
+               naslovu, pa se "Raspored časova" na uzim telefonima lomio u dva reda. -->
+          <div class="sub-red">
+            <div class="sub" id="childLabel"></div>
+            <button type="button" class="gear-btn" id="podesavanjaBtn" style="display:none;" aria-label="Podešavanja rasporeda" title="Podešavanja rasporeda">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </button>
+          </div>
         </div>
       </div>
-      <div class="header-right">
-        <button type="button" class="gear-btn" id="podesavanjaBtn" style="display:none;" aria-label="Podešavanja rasporeda" title="Podešavanja rasporeda">
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        </button>
-        <span class="razred-badge" id="razredBadge" style="display:none;"></span>
-      </div>
+      <span class="razred-badge" id="razredBadge" style="display:none;"></span>
     </div>
     <div id="podesavanjaWrap"></div>
 
@@ -940,8 +950,10 @@ function renderPodesavanja() {
             '<input type="text" id="rpRazred" maxlength="6" placeholder="V" value="' + escapeHtml(r.razred || "") + '" /></div>' +
           '<div class="rp-polje"><span class="rp-oznaka">Odjeljenje</span>' +
             '<input type="text" id="rpOdjeljenje" maxlength="6" placeholder="7" value="' + escapeHtml(r.odjeljenje || "") + '" /></div>' +
-          '<button type="button" class="rp-dugme" id="rpSacuvaj">Sačuvaj</button>' +
-          '<button type="button" class="rp-dugme rp-brisi" id="rpBrisi">Ukloni</button>' +
+          '<div class="pod-akcije">' +
+            '<button type="button" class="rp-dugme" id="rpSacuvaj">Sačuvaj</button>' +
+            '<button type="button" class="rp-dugme rp-brisi" id="rpBrisi">Ukloni</button>' +
+          '</div>' +
           '<div class="rp-napomena">Upisuje se posebno za svako dijete. Prikazuje se spojeno, u boji djeteta — npr. V i 7 daju <b>V7</b>.</div>' +
         '</div>' +
       '</div>' +
