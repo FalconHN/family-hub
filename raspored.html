@@ -76,6 +76,12 @@
   }
   .razred-panel .rp-brisi { background: none; color: #B0524A; padding: 9px 6px; }
   .razred-panel .rp-napomena { flex: 1 1 100%; font-size: 12px; color: #8A8578; }
+  /* "Boje djece" zivi unutar ovog panela - tanka crta ga odvaja od polja za razred. */
+  .razred-panel .rp-razdjelnik { flex: 1 1 100%; height: 1px; background: #F0EDE5; margin: 4px 0 0; }
+  .razred-panel .rp-boje-red { flex: 1 1 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .razred-panel .rp-boje-oznaka { font-size: 11.5px; font-weight: 700; color: #8A8578; letter-spacing: 0.06em; text-transform: uppercase; }
+  .razred-panel #childColorsPanelWrap { flex: 1 1 100%; }
+  .razred-panel #childColorsPanelWrap .daycolors-manage-panel { margin-bottom: 0; }
   @media (min-width: 768px) {
     .razred-badge { font-size: 34px; max-width: 260px; }
     .razred-panel input { width: 110px; }
@@ -315,11 +321,9 @@
     <div id="razredPanelWrap"></div>
 
     <div class="tabs-scroll" id="childTabs" style="display:none;"></div>
-    <div class="week-grid-card-header" style="padding:0 2px 8px;">
-      <span></span>
-      <button type="button" class="manage-link" id="childColorsToggle" style="display:none;"></button>
-    </div>
-    <div id="childColorsPanelWrap"></div>
+    <!-- Dugme "Boje djece" i njegov panel vise ne stoje ovdje. Premjesteni su u panel koji se
+         otvara klikom na oznaku razreda (gore desno), da pocetna strana ostane cista. Crtaju
+         se u #razredPanelWrap, unutar renderRazredPanel(). -->
     <div class="tabs-scroll" id="smjenaTabs" style="display:none;"></div>
 
     <div class="card week-grid-card">
@@ -735,6 +739,8 @@ function setChildColor(childId, hex, textHex) {
   childColorPickerFor = null;
   renderChildTabs();
   renderChildColorsPanel();
+  // Oznaka razreda nosi boju djeteta - neka se prefarba odmah, bez cekanja odgovora baze.
+  renderRazredBadge();
   const payload = {};
   payload[childId] = { c: hex, t: textHex || hex };
   db.collection("raspored").doc("_childColors").set(payload, { merge: true });
@@ -744,7 +750,7 @@ function renderChildColorsPanel() {
   const toggleBtn = document.getElementById("childColorsToggle");
   if (!toggleBtn) return;
   toggleBtn.style.display = role === "parent" ? "inline" : "none";
-  toggleBtn.textContent = childColorsPanelOpen ? "Zatvori boje" : "Boje djece";
+  toggleBtn.textContent = childColorsPanelOpen ? "Zatvori" : "Promijeni";
   if (toggleBtn.dataset.bound !== "1") {
     toggleBtn.addEventListener("click", () => {
       childColorsPanelOpen = !childColorsPanelOpen;
@@ -901,7 +907,13 @@ function renderRazredPanel() {
   const wrap = document.getElementById("razredPanelWrap");
   if (!wrap) return;
   const child = CHILDREN.find((c) => c.id === selectedChildId);
-  if (!razredPanelOpen || role !== "parent" || !child) { wrap.innerHTML = ""; return; }
+  if (!razredPanelOpen || role !== "parent" || !child) {
+    // Kad se panel zatvori, boje se zatvaraju sa njim - da se sljedeci put otvori uredno.
+    childColorsPanelOpen = false;
+    childColorPickerFor = null;
+    wrap.innerHTML = "";
+    return;
+  }
   const r = RAZREDI[selectedChildId] || {};
   wrap.innerHTML =
     '<div class="razred-panel">' +
@@ -912,7 +924,15 @@ function renderRazredPanel() {
       '<button type="button" class="rp-dugme" id="rpSacuvaj">Sačuvaj</button>' +
       '<button type="button" class="rp-dugme rp-brisi" id="rpBrisi">Ukloni</button>' +
       '<div class="rp-napomena">Upisuje se posebno za svako dijete. Prikazuje se spojeno, u boji djeteta — npr. V i 7 daju <b>V7</b>.</div>' +
+      '<div class="rp-razdjelnik"></div>' +
+      '<div class="rp-boje-red">' +
+        '<span class="rp-boje-oznaka">Boje djece</span>' +
+        '<button type="button" class="manage-link" id="childColorsToggle" style="display:none;"></button>' +
+      '</div>' +
+      '<div id="childColorsPanelWrap"></div>' +
     '</div>';
+  // Dugme i panel boja su tek sad u dokumentu - popuni ih.
+  renderChildColorsPanel();
   const polje = document.getElementById("rpRazred");
   if (polje) polje.focus();
   document.getElementById("rpSacuvaj").addEventListener("click", () => {
