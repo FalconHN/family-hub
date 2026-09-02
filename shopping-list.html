@@ -76,6 +76,20 @@
 <script type="text/plain" id="app-source-code">
 const { useState, useEffect, useRef } = React;
 
+// Podešavanja PRIKAZA se pamte u samom telefonu (localStorage), a NE u zajedničkom
+// dokumentu u bazi. Razlog: "sakrij kupljeno" je lična stvar - ako bi se čuvalo u bazi,
+// čim jedno sakrije kupljeno, nestalo bi i drugome sa ekrana usred kupovine.
+// Sve je u try/catch jer u privatnom prozoru i uz zabranjene kolačiće pristup baca grešku.
+function procitajPrekidac(kljuc, podrazumijevano) {
+  try {
+    const v = localStorage.getItem(kljuc);
+    return v === null ? podrazumijevano : v === "1";
+  } catch (e) { return podrazumijevano; }
+}
+function zapamtiPrekidac(kljuc, vrijednost) {
+  try { localStorage.setItem(kljuc, vrijednost ? "1" : "0"); } catch (e) {}
+}
+
 // Firestore is used directly below for shared, real-time sync.
 const db = firebase.firestore();
 const sharedDocRef = db.collection('shopping-list').doc('shared');
@@ -401,7 +415,7 @@ function SmartShoppingList() {
   const [loaded, setLoaded] = useState(false);
   const [syncError, setSyncError] = useState(false); // učitavanje iz baze nije uspjelo
   const [tab, setTab] = useState("all");
-  const [hidePurchased, setHidePurchased] = useState(false);
+  const [hidePurchased, setHidePurchased] = useState(() => procitajPrekidac("fhKupovinaSakrijKupljeno", false));
   // Režim rasporeda: dok je uključen, uz svaku karticu se pokažu strelice za pomjeranje.
   // Namjerno NIJE stalno uključen - strelice bi inače sužavale svaku karticu i smetale u
   // svakodnevnom korišćenju, a raspoređivanje se radi rijetko (npr. da se poređa redom kojim
@@ -859,6 +873,9 @@ function SmartShoppingList() {
   function totalCost(it) {
     return kolicinaZa(it) * (Number(it.price) || 0);
   }
+
+  // Zapamti izbor da bi sljedeći put ekran izgledao isto kako si ga ostavio.
+  useEffect(() => { zapamtiPrekidac("fhKupovinaSakrijKupljeno", hidePurchased); }, [hidePurchased]);
 
   const visibleItems = hidePurchased ? items.filter((it) => !it.purchased) : items;
 
