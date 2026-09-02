@@ -1143,12 +1143,21 @@ function RecipeApp() {
         const json = JSON.stringify(spojeni);
         lastSentRecipes.current = json;
         tx.set(sharedDocRef, { recepti: json }, { merge: true });
-        return spojeni;
-      }).then((spojeni) => {
+        return { spojeni: spojeni, tudjiNovi: tudjiNovi };
+      }).then((rez) => {
         saveTimer.current = null;
-        if (!spojeni) return;
-        zapamtiVidjeneRecepte(spojeni);
-        setRecipes((prev) => (JSON.stringify(prev) === JSON.stringify(spojeni) ? prev : spojeni));
+        if (!rez) return;
+        zapamtiVidjeneRecepte(rez.spojeni);
+        // RANIJE JE OVDJE BILA ISTA GREŠKA KAO U KUPOVINI: cijeli spisak se vraćao na "spojeni",
+        // a to je snimak od PRIJE snimanja (400 ms + odlazak do baze i nazad). Sve što se u
+        // međuvremenu promijenilo vraćalo bi se unazad. Od sad se lokalno stanje ne dira -
+        // samo se dopišu recepti koje je neko drugi dodao, i to na TRENUTNO stanje.
+        if (!rez.tudjiNovi.length) return;
+        setRecipes((prev) => {
+          const imamo = new Set(prev.map((r) => r && r.id));
+          const dodaj = rez.spojeni.filter((r) => r && !imamo.has(r.id));
+          return dodaj.length ? prev.concat(dodaj) : prev;
+        });
       }).catch((e) => {
         saveTimer.current = null;
         console.error("Failed to save recepti", e);
