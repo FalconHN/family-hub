@@ -459,6 +459,10 @@ function SmartShoppingList() {
   function zapamtiVidjene(niz) {
     (niz || []).forEach((it) => { if (it && it.id != null) vidjeniIds.current.add(it.id); });
   }
+  // Da li je neko polje trenutno otvoreno za kucanje. Polja su "kontrolisana" - tekst u njima
+  // dolazi pravo iz stanja liste - pa svaka izmjena liste dok se kuca prepise ono sto je
+  // korisnik upravo ukucao. Zato dok je polje otvoreno NE preuzimamo stanje iz baze.
+  const uredjujeSe = useRef(false);
   const lastSentFavorites = useRef(null);
   const lastSentBudget = useRef(null);
   const lastSentStoreColors = useRef(null);
@@ -484,9 +488,10 @@ function SmartShoppingList() {
                 // NE preuzimaj stanje iz baze - pregazilo bi tu izmjenu i ona se nikad ne bi
                 // ni poslala (tajmer bi se ponovo naoružao već pregaženom vrijednošću).
                 // Tuđe stavke se ne gube: spajaju se pri snimanju, u transakciji dolje.
-                if (saveTimer.current) {
+                if (saveTimer.current || uredjujeSe.current) {
                   // namjerno ništa - ove stavke NE upisujemo u vidjeniIds, pa će ih spajanje
-                  // prepoznati kao tuđe nove i sačuvati ih.
+                  // prepoznati kao tuđe nove i sačuvati ih. Isto važi i dok korisnik kuca u
+                  // nekom polju: tada bi preuzimanje iz baze pregazilo slova u toku.
                 } else {
                   const nove = parsed.map((it, i) => ({ note: "", order: i, ...it }));
                   zapamtiVidjene(nove);
@@ -593,13 +598,23 @@ function SmartShoppingList() {
         const json = JSON.stringify(spojene);
         lastSentItems.current = json;
         tx.set(sharedDocRef, { items: json }, { merge: true });
-        return spojene;
-      }).then((spojene) => {
+        return { spojene: spojene, tudjeNove: tudjeNove };
+      }).then((rez) => {
         saveTimer.current = null;
-        if (!spojene) return;
-        zapamtiVidjene(spojene);
-        // Ako je spajanje pokupilo tuđe stavke, prikaži ih i kod nas.
-        setItems((prev) => (JSON.stringify(prev) === JSON.stringify(spojene) ? prev : spojene));
+        if (!rez) return;
+        zapamtiVidjene(rez.spojene);
+        // RANIJE JE OVDJE BILA GREŠKA: cijela lista se vraćala na "spojene" - a to je snimak
+        // stanja od prije snimanja (400 ms + odlazak do baze i nazad, na telefonu lako i
+        // sekunda). Sve što je korisnik u međuvremenu otkucao bilo bi pregaženo starijom
+        // vrijednošću: napomena bi skakala unazad, cijena bi se vraćala na staru, prodavnica
+        // bi nestajala. Od sad se lokalno stanje NE dira - samo se dopišu stavke koje je
+        // neko drugi dodao, i to na TRENUTNO stanje, ne na onaj stari snimak.
+        if (!rez.tudjeNove.length) return;
+        setItems((prev) => {
+          const imamo = new Set(prev.map((it) => it && it.id));
+          const dodaj = rez.tudjeNove.filter((it) => it && !imamo.has(it.id));
+          return dodaj.length ? prev.concat(dodaj) : prev;
+        });
       }).catch((e) => {
         saveTimer.current = null;
         console.error("Failed to save shopping list", e);
@@ -607,6 +622,9 @@ function SmartShoppingList() {
     }, 400);
     return () => { if (saveTimer.current) { clearTimeout(saveTimer.current); } };
   }, [items, loaded]);
+
+  // Zastavica "korisnik upravo kuca" prati koje je polje otvoreno.
+  useEffect(() => { uredjujeSe.current = editingCell !== null; }, [editingCell]);
 
   useEffect(() => {
     if (!loaded || !primljeniPodaci.current) return;
