@@ -112,6 +112,49 @@ async function uploadImageToCloudinary(file) {
   return data.secure_url;
 }
 
+// Video ide na isti Cloudinary nalog, samo na /video/upload umjesto /image/upload.
+// Besplatni plan prima najviše 100 MB po snimku, pa se veći fajl zaustavlja ovdje sa
+// jasnom porukom umjesto da puca na pola otpremanja.
+const CLOUDINARY_MAX_VIDEO_MB = 100;
+
+// Upload preset za video. Može biti isti kao za slike, ALI taj preset u Cloudinary-ju mora
+// imati "Resource type: Auto" (podrazumijevano je "Image", pa Cloudinary odbija .mp4 porukom
+// "Image file format mp4 not allowed"). Ako napraviš zaseban preset samo za video, upiši
+// njegovo ime ovdje umjesto CLOUDINARY_UPLOAD_PRESET.
+const CLOUDINARY_VIDEO_PRESET = CLOUDINARY_UPLOAD_PRESET;
+
+function uploadVideoToCloudinary(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const mb = file.size / 1024 / 1024;
+    if (mb > CLOUDINARY_MAX_VIDEO_MB) {
+      reject(new Error("Snimak je " + mb.toFixed(0) + " MB, a stane najviše " + CLOUDINARY_MAX_VIDEO_MB + " MB. Skrati ga ili snimi u nižem kvalitetu."));
+      return;
+    }
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_VIDEO_PRESET);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "https://api.cloudinary.com/v1_1/" + CLOUDINARY_CLOUD_NAME + "/video/upload");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      let data = null;
+      try { data = JSON.parse(xhr.responseText); } catch (err) {}
+      if (xhr.status >= 200 && xhr.status < 300 && data && data.secure_url) { resolve(data.secure_url); return; }
+      const poruka = data && data.error && data.error.message ? data.error.message : ("greška " + xhr.status);
+      // Najčešća zamka: upload preset je podešen samo za slike, pa Cloudinary odbije video.
+      if (/format .* not allowed|resource type|Image file format/i.test(poruka)) {
+        reject(new Error("Cloudinary za sada ne prima video. U Cloudinary podešavanjima otvori upload preset \"" + CLOUDINARY_VIDEO_PRESET + "\" i postavi Resource type na Auto."));
+        return;
+      }
+      reject(new Error(poruka));
+    };
+    xhr.onerror = () => reject(new Error("veza je prekinuta"));
+    xhr.send(formData);
+  });
+}
+
 // "Skeniraj recept": šalje fotografiju Cloudflare Worker-u (koji drži Gemini ključ)
 // i dobija nazad strukturisan recept. VAŽNO: zamijeni URL ispod svojim Worker URL-om
 // nakon što ga deployuješ (vidi recept-ocr-worker.js).
@@ -219,6 +262,48 @@ function safeUrl(u) {
   const s = (u || "").trim();
   if (!s) return "";
   return /^https?:\/\//i.test(s) ? s : "";
+}
+
+// Snimci sa telefona (naročito iPhone .mov) često ne mogu da se puste direktno u browseru.
+// Ako fajl stoji na Cloudinary-ju, tražimo verziju koju Cloudinary sam prebaci u format koji
+// browser razumije (f_auto) i stisne (q_auto). Original ostaje kao rezerva.
+function cloudinaryZaBrowser(url) {
+  if (url.indexOf("res.cloudinary.com") === -1) return "";
+  if (url.indexOf("/video/upload/") === -1) return "";
+  if (/\/video\/upload\/[^/]*(f_auto|q_auto)/.test(url)) return "";
+  return url.replace("/video/upload/", "/video/upload/f_auto,q_auto/");
+}
+
+// Prepoznaje šta je zalijepljeno u polje "Video" i kako to treba prikazati:
+//   "fajl"     - direktan video fajl (npr. sa Cloudinary-ja), pušta se u samom receptu
+//   "ugradnja" - YouTube ili Vimeo, plejer se ugrađuje u recept
+//   "link"     - sve ostalo (Facebook, Instagram, OneDrive, TikTok...). Oni namjerno ne
+//                dozvoljavaju puštanje na tuđoj stranici, pa ostaje dugme koje otvara original.
+function vrstaVidea(url) {
+  const izvor = safeUrl(url);
+  if (!izvor) return null;
+  let u = null;
+  try { u = new URL(izvor); } catch (e) { return null; }
+  const host = u.hostname.replace(/^www\./, "").toLowerCase();
+  const put = u.pathname;
+
+  if (host === "youtu.be") {
+    const id = put.slice(1).split("/")[0];
+    if (id) return { tip: "ugradnja", src: "https://www.youtube-nocookie.com/embed/" + id, original: izvor };
+  }
+  if (host === "youtube.com" || host === "m.youtube.com" || host === "youtube-nocookie.com") {
+    const id = u.searchParams.get("v") || (put.match(/^\/(?:embed|shorts|v|live)\/([^/?#]+)/) || [])[1];
+    if (id) return { tip: "ugradnja", src: "https://www.youtube-nocookie.com/embed/" + id, original: izvor };
+  }
+  if (host === "vimeo.com" || host === "player.vimeo.com") {
+    const id = (put.match(/(\d{6,})/) || [])[1];
+    if (id) return { tip: "ugradnja", src: "https://player.vimeo.com/video/" + id, original: izvor };
+  }
+  if (/\.(mp4|m4v|mov|webm|ogv|ogg)$/i.test(put)) {
+    const prilagodjen = cloudinaryZaBrowser(izvor);
+    return { tip: "fajl", src: prilagodjen || izvor, rezerva: prilagodjen ? izvor : "", original: izvor };
+  }
+  return { tip: "link", original: izvor };
 }
 
 // ---- Cijena recepta ----
@@ -959,6 +1044,73 @@ function playIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
   );
 }
+// Video u receptu. Fajl i YouTube/Vimeo se puštaju tu, na licu mjesta; sve ostalo ostaje
+// dugme koje otvara original. Ako plejer ne uspije da pusti fajl, prvo se proba original,
+// pa tek onda pada na dugme - da korisnik nikad ne ostane pred crnim kvadratom.
+function VideoRecepta({ url }) {
+  const v = vrstaVidea(url);
+  const [izvor, setIzvor] = useState("");
+  const [pao, setPao] = useState(false);
+  useEffect(() => {
+    setPao(false);
+    setIzvor("");
+  }, [url]);
+  if (!v) return null;
+
+  const dugme = (
+    <a
+      href={v.original}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "#0F222B", color: "#fff", textDecoration: "none", padding: "8px 14px", borderRadius: 9, fontSize: 13, fontWeight: 600 }}
+    >
+      {playIcon()} Pogledaj video
+    </a>
+  );
+
+  if (v.tip === "link" || pao) {
+    return (
+      <div style={{ marginBottom: 18 }}>
+        {pao && <div style={{ color: "#8A8578", fontSize: 12.5, marginBottom: 7 }}>Ovaj snimak ne može da se pusti ovdje.</div>}
+        {dugme}
+      </div>
+    );
+  }
+
+  if (v.tip === "ugradnja") {
+    return (
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ position: "relative", width: "100%", paddingTop: "56.25%", borderRadius: 12, overflow: "hidden", background: "#000" }}>
+          <iframe
+            src={v.src}
+            title="Video recepta"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            allowFullScreen
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <video
+        key={izvor || v.src}
+        src={izvor || v.src}
+        controls
+        playsInline
+        preload="metadata"
+        onError={() => {
+          if (v.rezerva && izvor !== v.rezerva) setIzvor(v.rezerva);
+          else setPao(true);
+        }}
+        style={{ width: "100%", maxHeight: 420, borderRadius: 12, background: "#000", display: "block" }}
+      />
+    </div>
+  );
+}
+
 function cartIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1693,16 +1845,7 @@ function RecipeDetailModal({ recipe, cjenovnik, onClose, onEdit, onDelete, onAdd
             </div>
           )}
 
-          {recipe.videoUrl && (
-            <a
-              href={recipe.videoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "#0F222B", color: "#fff", textDecoration: "none", padding: "8px 14px", borderRadius: 9, fontSize: 13, fontWeight: 600, marginBottom: 18 }}
-            >
-              {playIcon()} Pogledaj video
-            </a>
-          )}
+          {recipe.videoUrl && <VideoRecepta url={recipe.videoUrl} />}
 
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontWeight: 700, fontSize: 13.5, color: "#0F222B", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.3 }}>Sastojci</div>
@@ -1787,6 +1930,10 @@ function RecipeFormModal({ form, setForm, onSave, onCancel, knownCategories, cje
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const fileInputRef = useRef(null);
+  const videoInputRef = useRef(null);
+  const [videoUploading, setVideoUploading] = useState(false);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [videoError, setVideoError] = useState("");
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
   const [scanNotice, setScanNotice] = useState(""); // info (ne greška) kad se koristi rezerva bez AI
@@ -1983,6 +2130,25 @@ function RecipeFormModal({ form, setForm, onSave, onCancel, knownCategories, cje
       setUploading(false);
     }
   }
+  async function handleVideoSelected(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ""; // omogući ponovni odabir istog fajla ako otpremanje ne uspije
+    if (!file) return;
+    setVideoError("");
+    setVideoProgress(0);
+    setVideoUploading(true);
+    try {
+      const url = await uploadVideoToCloudinary(file, setVideoProgress);
+      updateField("videoUrl", url);
+    } catch (err) {
+      console.error("Cloudinary video upload failed", err);
+      setVideoError("Otpremanje videa nije uspjelo: " + (err && err.message ? err.message : "nepoznat razlog"));
+    } finally {
+      setVideoUploading(false);
+      setVideoProgress(0);
+    }
+  }
+
   function updateSastojak(idx, field, value) {
     setForm((prev) => {
       const next = prev.sastojci.slice();
@@ -2110,8 +2276,38 @@ function RecipeFormModal({ form, setForm, onSave, onCancel, knownCategories, cje
         </div>
 
         <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle}>Video (URL)</label>
-          <input type="text" value={form.videoUrl} onChange={(e) => updateField("videoUrl", e.target.value)} placeholder="https://..." style={inputStyle} />
+          <label style={labelStyle}>Video</label>
+          <input type="text" value={form.videoUrl} onChange={(e) => updateField("videoUrl", e.target.value)} placeholder="https://... (ili otpremi ispod)" style={inputStyle} />
+          <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoSelected} style={{ display: "none" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => videoInputRef.current && videoInputRef.current.click()}
+              disabled={videoUploading}
+              style={{ background: "#F0EDE4", color: "#0F222B", border: "none", borderRadius: 9, padding: "8px 12px", fontWeight: 600, fontSize: 13, cursor: videoUploading ? "default" : "pointer", fontFamily: "inherit", opacity: videoUploading ? 0.7 : 1, display: "flex", alignItems: "center", gap: 6 }}
+            >
+              {uploadIcon()} {videoUploading ? "Otpremanje " + videoProgress + "%" : "Otpremi video"}
+            </button>
+            {form.videoUrl && !videoUploading && (
+              <button
+                type="button"
+                onClick={() => { updateField("videoUrl", ""); setVideoError(""); }}
+                style={{ background: "none", color: "#8A8578", border: "none", padding: "8px 2px", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
+              >
+                Ukloni
+              </button>
+            )}
+          </div>
+          {videoUploading && (
+            <div style={{ height: 4, borderRadius: 4, background: "#E7E3D8", marginTop: 8, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: videoProgress + "%", background: "#0F222B", transition: "width .2s" }} />
+            </div>
+          )}
+          {videoError && <div style={{ color: "#B3413E", fontSize: 12.5, marginTop: 6 }}>{videoError}</div>}
+          <div style={{ color: "#8A8578", fontSize: 12, marginTop: 6, lineHeight: 1.45 }}>
+            Otpremljen snimak i YouTube link se puštaju u samom receptu. Facebook, Instagram i OneDrive
+            ne dozvoljavaju puštanje na tuđoj stranici, pa se takav link otvara kod njih.
+          </div>
         </div>
 
         <div style={{ marginBottom: 14 }}>
