@@ -793,6 +793,7 @@ function emptyRecipeForm() {
     kategorija: "",
     slikaUrl: "",
     videoUrl: "",
+    videos: [{ url: "", naslov: "" }],
     sastojci: [{ naziv: "", kolicina: "", jedinica: "" }],
     priprema: "",
     brojPorcija: "",
@@ -1044,10 +1045,25 @@ function playIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
   );
 }
+// Recept može imati više snimaka - npr. tuđi sa YouTube-a i svoj, otpremljen. Novi recepti
+// drže listu u polju "videos", a stariji jedan snimak u "videoUrl". Ova funkcija oba oblika
+// svodi na isti, pa ostatak koda ne mora da zna za razliku.
+function videiRecepta(r) {
+  if (!r) return [];
+  const lista = Array.isArray(r.videos) ? r.videos : [];
+  const spremni = lista
+    .map((v) => (typeof v === "string"
+      ? { url: v, naslov: "" }
+      : { url: (v && v.url) || "", naslov: (v && v.naslov) || "" }))
+    .filter((v) => safeUrl(v.url));
+  if (spremni.length) return spremni;
+  return safeUrl(r.videoUrl) ? [{ url: r.videoUrl, naslov: "" }] : [];
+}
+
 // Video u receptu. Fajl i YouTube/Vimeo se puštaju tu, na licu mjesta; sve ostalo ostaje
 // dugme koje otvara original. Ako plejer ne uspije da pusti fajl, prvo se proba original,
 // pa tek onda pada na dugme - da korisnik nikad ne ostane pred crnim kvadratom.
-function VideoRecepta({ url }) {
+function VideoRecepta({ url, naslov }) {
   const v = vrstaVidea(url);
   const [izvor, setIzvor] = useState("");
   const [pao, setPao] = useState(false);
@@ -1056,6 +1072,10 @@ function VideoRecepta({ url }) {
     setIzvor("");
   }, [url]);
   if (!v) return null;
+
+  const zaglavlje = naslov
+    ? <div style={{ fontWeight: 600, fontSize: 13, color: "#0F222B", marginBottom: 7 }}>{naslov}</div>
+    : null;
 
   const dugme = (
     <a
@@ -1071,6 +1091,7 @@ function VideoRecepta({ url }) {
   if (v.tip === "link" || pao) {
     return (
       <div style={{ marginBottom: 18 }}>
+        {zaglavlje}
         {pao && <div style={{ color: "#8A8578", fontSize: 12.5, marginBottom: 7 }}>Ovaj snimak ne može da se pusti ovdje.</div>}
         {dugme}
       </div>
@@ -1080,6 +1101,7 @@ function VideoRecepta({ url }) {
   if (v.tip === "ugradnja") {
     return (
       <div style={{ marginBottom: 18 }}>
+        {zaglavlje}
         <div style={{ position: "relative", width: "100%", paddingTop: "56.25%", borderRadius: 12, overflow: "hidden", background: "#000" }}>
           <iframe
             src={v.src}
@@ -1095,6 +1117,7 @@ function VideoRecepta({ url }) {
 
   return (
     <div style={{ marginBottom: 18 }}>
+      {zaglavlje}
       <video
         key={izvor || v.src}
         src={izvor || v.src}
@@ -1415,9 +1438,11 @@ function RecipeApp() {
     setForm(emptyRecipeForm());
   }
   function openEditForm(recipe) {
+    const postojeciVidei = videiRecepta(recipe).map((v) => ({ ...v }));
     setForm({
       ...recipe,
       sastojci: recipe.sastojci && recipe.sastojci.length ? recipe.sastojci.map((s) => ({ ...s })) : [{ naziv: "", kolicina: "", jedinica: "" }],
+      videos: postojeciVidei.length ? postojeciVidei : [{ url: "", naslov: "" }],
       brojPorcija: recipe.brojPorcija || "",
     });
     setDetailId(null);
@@ -1435,12 +1460,18 @@ function RecipeApp() {
         jedinica: s.jedinica || "",
       }))
       .filter((s) => s.naziv);
+    const cleanVideos = (form.videos || [])
+      .map((v) => ({ url: safeUrl(v && v.url), naslov: ((v && v.naslov) || "").trim() }))
+      .filter((v) => v.url);
     const cleaned = {
       id: form.id || uid(),
       naziv: naziv,
       kategorija: (form.kategorija || "").trim(),
       slikaUrl: safeUrl(form.slikaUrl),
-      videoUrl: safeUrl(form.videoUrl),
+      videos: cleanVideos,
+      // Stariji uređaji i stare rezervne kopije znaju samo za "videoUrl", pa tu i dalje
+      // upisujemo prvi snimak - da se ništa ne izgubi ako se recept otvori u staroj verziji.
+      videoUrl: cleanVideos.length ? cleanVideos[0].url : "",
       sastojci: cleanSastojci,
       priprema: (form.priprema || "").trim(),
       brojPorcija: form.brojPorcija === "" || form.brojPorcija === null || form.brojPorcija === undefined ? "" : Number(form.brojPorcija),
@@ -1845,7 +1876,9 @@ function RecipeDetailModal({ recipe, cjenovnik, onClose, onEdit, onDelete, onAdd
             </div>
           )}
 
-          {recipe.videoUrl && <VideoRecepta url={recipe.videoUrl} />}
+          {videiRecepta(recipe).map((v, i) => (
+            <VideoRecepta key={v.url + "|" + i} url={v.url} naslov={v.naslov} />
+          ))}
 
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontWeight: 700, fontSize: 13.5, color: "#0F222B", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.3 }}>Sastojci</div>
@@ -1931,9 +1964,10 @@ function RecipeFormModal({ form, setForm, onSave, onCancel, knownCategories, cje
   const [uploadError, setUploadError] = useState("");
   const fileInputRef = useRef(null);
   const videoInputRef = useRef(null);
-  const [videoUploading, setVideoUploading] = useState(false);
   const [videoProgress, setVideoProgress] = useState(0);
-  const [videoError, setVideoError] = useState("");
+  const [videoRed, setVideoRed] = useState(null);    // koji red liste se trenutno otprema
+  const [videoGreska, setVideoGreska] = useState(null); // { red, poruka }
+  const videoRedRef = useRef(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
   const [scanNotice, setScanNotice] = useState(""); // info (ne greška) kad se koristi rezerva bez AI
@@ -2130,23 +2164,51 @@ function RecipeFormModal({ form, setForm, onSave, onCancel, knownCategories, cje
       setUploading(false);
     }
   }
+  // Isti skriveni "izaberi fajl" se koristi za sve redove liste; ref pamti u koji red
+  // upisujemo rezultat, jer se state ne stigne osvježiti prije nego se otvori birač fajlova.
+  function otvoriIzborVidea(idx) {
+    videoRedRef.current = idx;
+    setVideoGreska(null);
+    if (videoInputRef.current) videoInputRef.current.click();
+  }
+
   async function handleVideoSelected(e) {
     const file = e.target.files && e.target.files[0];
     e.target.value = ""; // omogući ponovni odabir istog fajla ako otpremanje ne uspije
-    if (!file) return;
-    setVideoError("");
+    const idx = videoRedRef.current;
+    if (!file || idx === null || idx === undefined) return;
+    setVideoGreska(null);
     setVideoProgress(0);
-    setVideoUploading(true);
+    setVideoRed(idx);
     try {
       const url = await uploadVideoToCloudinary(file, setVideoProgress);
-      updateField("videoUrl", url);
+      updateVideo(idx, "url", url);
     } catch (err) {
       console.error("Cloudinary video upload failed", err);
-      setVideoError("Otpremanje videa nije uspjelo: " + (err && err.message ? err.message : "nepoznat razlog"));
+      setVideoGreska({ red: idx, poruka: "Otpremanje videa nije uspjelo: " + (err && err.message ? err.message : "nepoznat razlog") });
     } finally {
-      setVideoUploading(false);
+      setVideoRed(null);
       setVideoProgress(0);
     }
+  }
+
+  function updateVideo(idx, polje, vrijednost) {
+    setForm((prev) => {
+      const next = (prev.videos || []).slice();
+      next[idx] = { ...next[idx], [polje]: vrijednost };
+      return { ...prev, videos: next };
+    });
+  }
+  function dodajVideo() {
+    setForm((prev) => ({ ...prev, videos: (prev.videos || []).concat([{ url: "", naslov: "" }]) }));
+  }
+  function ukloniVideo(idx) {
+    setVideoGreska(null);
+    setForm((prev) => {
+      const next = (prev.videos || []).slice();
+      next.splice(idx, 1);
+      return { ...prev, videos: next.length ? next : [{ url: "", naslov: "" }] };
+    });
   }
 
   function updateSastojak(idx, field, value) {
@@ -2277,36 +2339,67 @@ function RecipeFormModal({ form, setForm, onSave, onCancel, knownCategories, cje
 
         <div style={{ marginBottom: 14 }}>
           <label style={labelStyle}>Video</label>
-          <input type="text" value={form.videoUrl} onChange={(e) => updateField("videoUrl", e.target.value)} placeholder="https://... (ili otpremi ispod)" style={inputStyle} />
           <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoSelected} style={{ display: "none" }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => videoInputRef.current && videoInputRef.current.click()}
-              disabled={videoUploading}
-              style={{ background: "#F0EDE4", color: "#0F222B", border: "none", borderRadius: 9, padding: "8px 12px", fontWeight: 600, fontSize: 13, cursor: videoUploading ? "default" : "pointer", fontFamily: "inherit", opacity: videoUploading ? 0.7 : 1, display: "flex", alignItems: "center", gap: 6 }}
-            >
-              {uploadIcon()} {videoUploading ? "Otpremanje " + videoProgress + "%" : "Otpremi video"}
-            </button>
-            {form.videoUrl && !videoUploading && (
-              <button
-                type="button"
-                onClick={() => { updateField("videoUrl", ""); setVideoError(""); }}
-                style={{ background: "none", color: "#8A8578", border: "none", padding: "8px 2px", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
-              >
-                Ukloni
-              </button>
-            )}
-          </div>
-          {videoUploading && (
-            <div style={{ height: 4, borderRadius: 4, background: "#E7E3D8", marginTop: 8, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: videoProgress + "%", background: "#0F222B", transition: "width .2s" }} />
-            </div>
-          )}
-          {videoError && <div style={{ color: "#B3413E", fontSize: 12.5, marginTop: 6 }}>{videoError}</div>}
-          <div style={{ color: "#8A8578", fontSize: 12, marginTop: 6, lineHeight: 1.45 }}>
-            Otpremljen snimak i YouTube link se puštaju u samom receptu. Facebook, Instagram i OneDrive
-            ne dozvoljavaju puštanje na tuđoj stranici, pa se takav link otvara kod njih.
+          {(form.videos || []).map((v, i) => {
+            const otpremaSe = videoRed === i;
+            const greskaOvdje = videoGreska && videoGreska.red === i ? videoGreska.poruka : "";
+            return (
+              <div key={i} style={{ border: "1px solid #E7E3D8", borderRadius: 10, padding: 10, marginBottom: 8, background: "#FBFAF7" }}>
+                <input
+                  type="text"
+                  value={v.url || ""}
+                  onChange={(e) => updateVideo(i, "url", e.target.value)}
+                  placeholder="https://... (ili otpremi ispod)"
+                  style={inputStyle}
+                />
+                <input
+                  type="text"
+                  value={v.naslov || ""}
+                  onChange={(e) => updateVideo(i, "naslov", e.target.value)}
+                  placeholder="Naziv, npr. „Moje uputstvo” (opciono)"
+                  style={{ ...inputStyle, marginTop: 6 }}
+                />
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => otvoriIzborVidea(i)}
+                    disabled={videoRed !== null}
+                    style={{ background: "#F0EDE4", color: "#0F222B", border: "none", borderRadius: 9, padding: "8px 12px", fontWeight: 600, fontSize: 13, cursor: videoRed !== null ? "default" : "pointer", fontFamily: "inherit", opacity: videoRed !== null ? 0.7 : 1, display: "flex", alignItems: "center", gap: 6 }}
+                  >
+                    {uploadIcon()} {otpremaSe ? "Otpremanje " + videoProgress + "%" : "Otpremi video"}
+                  </button>
+                  {videoRed === null && ((form.videos || []).length > 1 || v.url || v.naslov) && (
+                    <button
+                      type="button"
+                      onClick={() => ukloniVideo(i)}
+                      style={{ background: "none", color: "#8A8578", border: "none", padding: "8px 2px", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
+                    >
+                      Ukloni
+                    </button>
+                  )}
+                </div>
+                {otpremaSe && (
+                  <div style={{ height: 4, borderRadius: 4, background: "#E7E3D8", marginTop: 8, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: videoProgress + "%", background: "#0F222B", transition: "width .2s" }} />
+                  </div>
+                )}
+                {greskaOvdje && <div style={{ color: "#B3413E", fontSize: 12.5, marginTop: 6 }}>{greskaOvdje}</div>}
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            onClick={dodajVideo}
+            disabled={videoRed !== null}
+            style={{ background: "none", color: "#0F222B", border: "1px dashed #CFC8B8", borderRadius: 9, padding: "8px 12px", fontWeight: 600, fontSize: 13, cursor: videoRed !== null ? "default" : "pointer", fontFamily: "inherit", opacity: videoRed !== null ? 0.6 : 1 }}
+          >
+            + Dodaj još jedan video
+          </button>
+          <div style={{ color: "#8A8578", fontSize: 12, marginTop: 8, lineHeight: 1.45 }}>
+            Recept može imati više snimaka — npr. tuđi sa YouTube-a i svoj, otpremljen. Prikazuju se
+            jedan ispod drugog, istim redom. Otpremljen snimak, YouTube i Vimeo se puštaju u samom
+            receptu; Facebook, Instagram i OneDrive ne dozvoljavaju puštanje na tuđoj stranici, pa se
+            takav link otvara kod njih.
           </div>
         </div>
 
