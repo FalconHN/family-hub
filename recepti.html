@@ -793,7 +793,7 @@ function emptyRecipeForm() {
     kategorija: "",
     slikaUrl: "",
     videoUrl: "",
-    videos: [{ url: "", naslov: "" }],
+    videos: [],
     sastojci: [{ naziv: "", kolicina: "", jedinica: "" }],
     priprema: "",
     brojPorcija: "",
@@ -1053,11 +1053,43 @@ function videiRecepta(r) {
   const lista = Array.isArray(r.videos) ? r.videos : [];
   const spremni = lista
     .map((v) => (typeof v === "string"
-      ? { url: v, naslov: "" }
-      : { url: (v && v.url) || "", naslov: (v && v.naslov) || "" }))
+      ? { url: v, naslov: "", fajl: "", bajtova: 0 }
+      : {
+          url: (v && v.url) || "",
+          naslov: (v && v.naslov) || "",
+          fajl: (v && v.fajl) || "",       // ime fajla kad je snimak otpremljen sa telefona
+          bajtova: (v && v.bajtova) || 0,
+        }))
     .filter((v) => safeUrl(v.url));
   if (spremni.length) return spremni;
-  return safeUrl(r.videoUrl) ? [{ url: r.videoUrl, naslov: "" }] : [];
+  return safeUrl(r.videoUrl) ? [{ url: r.videoUrl, naslov: "", fajl: "", bajtova: 0 }] : [];
+}
+
+// Kratka oznaka na vrhu reda u formi, da se odmah vidi šta je šta bez čitanja duge adrese.
+function oznakaVidea(v) {
+  if (v && v.fajl) return "Moj snimak";
+  const izvor = safeUrl(v && v.url);
+  if (!izvor) return "Link";
+  let u = null;
+  try { u = new URL(izvor); } catch (e) { return "Link"; }
+  const host = u.hostname.replace(/^www\./, "").toLowerCase();
+  if (host === "youtu.be" || host.indexOf("youtube") !== -1) return "YouTube";
+  if (host.indexOf("vimeo.com") !== -1) return "Vimeo";
+  if (host.indexOf("facebook.com") !== -1 || host === "fb.watch") return "Facebook";
+  if (host.indexOf("instagram.com") !== -1) return "Instagram";
+  if (host.indexOf("tiktok.com") !== -1) return "TikTok";
+  if (host.indexOf("1drv.ms") !== -1 || host.indexOf("onedrive") !== -1 || host.indexOf("sharepoint.com") !== -1) return "OneDrive";
+  if (host.indexOf("res.cloudinary.com") !== -1) return "Moj snimak";
+  const t = vrstaVidea(izvor);
+  return t && t.tip === "fajl" ? "Snimak" : "Link";
+}
+
+// "18 MB" / "1.4 MB" - samo za prikaz uz ime otpremljenog snimka.
+function veliMB(bajtova) {
+  const b = Number(bajtova) || 0;
+  if (!b) return "";
+  const mb = b / 1024 / 1024;
+  return (mb < 10 ? mb.toFixed(1) : Math.round(mb)) + " MB";
 }
 
 // Video u receptu. Fajl i YouTube/Vimeo se puštaju tu, na licu mjesta; sve ostalo ostaje
@@ -1442,7 +1474,7 @@ function RecipeApp() {
     setForm({
       ...recipe,
       sastojci: recipe.sastojci && recipe.sastojci.length ? recipe.sastojci.map((s) => ({ ...s })) : [{ naziv: "", kolicina: "", jedinica: "" }],
-      videos: postojeciVidei.length ? postojeciVidei : [{ url: "", naslov: "" }],
+      videos: postojeciVidei,
       brojPorcija: recipe.brojPorcija || "",
     });
     setDetailId(null);
@@ -1461,7 +1493,12 @@ function RecipeApp() {
       }))
       .filter((s) => s.naziv);
     const cleanVideos = (form.videos || [])
-      .map((v) => ({ url: safeUrl(v && v.url), naslov: ((v && v.naslov) || "").trim() }))
+      .map((v) => ({
+        url: safeUrl(v && v.url),
+        naslov: ((v && v.naslov) || "").trim(),
+        fajl: ((v && v.fajl) || "").trim(),
+        bajtova: Number(v && v.bajtova) || 0,
+      }))
       .filter((v) => v.url);
     const cleaned = {
       id: form.id || uid(),
@@ -1965,9 +2002,10 @@ function RecipeFormModal({ form, setForm, onSave, onCancel, knownCategories, cje
   const fileInputRef = useRef(null);
   const videoInputRef = useRef(null);
   const [videoProgress, setVideoProgress] = useState(0);
-  const [videoRed, setVideoRed] = useState(null);    // koji red liste se trenutno otprema
-  const [videoGreska, setVideoGreska] = useState(null); // { red, poruka }
-  const videoRedRef = useRef(null);
+  const [videoOtprema, setVideoOtprema] = useState(false);
+  const [videoIme, setVideoIme] = useState("");      // ime fajla koji se upravo otprema
+  const [videoGreska, setVideoGreska] = useState("");
+  const [fokusIdx, setFokusIdx] = useState(-1);      // red kojem se daje kursor kad se tek doda
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
   const [scanNotice, setScanNotice] = useState(""); // info (ne greška) kad se koristi rezerva bez AI
@@ -2164,31 +2202,34 @@ function RecipeFormModal({ form, setForm, onSave, onCancel, knownCategories, cje
       setUploading(false);
     }
   }
-  // Isti skriveni "izaberi fajl" se koristi za sve redove liste; ref pamti u koji red
-  // upisujemo rezultat, jer se state ne stigne osvježiti prije nego se otvori birač fajlova.
-  function otvoriIzborVidea(idx) {
-    videoRedRef.current = idx;
-    setVideoGreska(null);
+  // Otpremanje UVIJEK dodaje novi red na kraj liste - nema načina da slučajno pregazi
+  // snimak koji je već unešen. Zato ovdje nema nikakvog indeksa reda.
+  function otpremiNoviSnimak() {
+    setVideoGreska("");
     if (videoInputRef.current) videoInputRef.current.click();
   }
 
   async function handleVideoSelected(e) {
     const file = e.target.files && e.target.files[0];
     e.target.value = ""; // omogući ponovni odabir istog fajla ako otpremanje ne uspije
-    const idx = videoRedRef.current;
-    if (!file || idx === null || idx === undefined) return;
-    setVideoGreska(null);
+    if (!file) return;
+    setVideoGreska("");
     setVideoProgress(0);
-    setVideoRed(idx);
+    setVideoIme(file.name);
+    setVideoOtprema(true);
     try {
       const url = await uploadVideoToCloudinary(file, setVideoProgress);
-      updateVideo(idx, "url", url);
+      setForm((prev) => ({
+        ...prev,
+        videos: (prev.videos || []).concat([{ url: url, naslov: "", fajl: file.name, bajtova: file.size }]),
+      }));
     } catch (err) {
       console.error("Cloudinary video upload failed", err);
-      setVideoGreska({ red: idx, poruka: "Otpremanje videa nije uspjelo: " + (err && err.message ? err.message : "nepoznat razlog") });
+      setVideoGreska("Otpremanje videa nije uspjelo: " + (err && err.message ? err.message : "nepoznat razlog"));
     } finally {
-      setVideoRed(null);
+      setVideoOtprema(false);
       setVideoProgress(0);
+      setVideoIme("");
     }
   }
 
@@ -2199,15 +2240,24 @@ function RecipeFormModal({ form, setForm, onSave, onCancel, knownCategories, cje
       return { ...prev, videos: next };
     });
   }
-  function dodajVideo() {
-    setForm((prev) => ({ ...prev, videos: (prev.videos || []).concat([{ url: "", naslov: "" }]) }));
+  function dodajLinkVidea() {
+    setVideoGreska("");
+    // Kursor ide u novi red. Ovo se NE smije raditi unutar setForm(prev => ...): ta funkcija se
+    // izvršava u toku iscrtavanja, pa React zna da odbaci cijelu izmjenu ako u njoj mijenjaš i
+    // neko drugo stanje. Zbog toga je red znao da se uopšte ne doda.
+    setFokusIdx(((form && form.videos) || []).length);
+    setForm((prev) => ({
+      ...prev,
+      videos: (prev.videos || []).concat([{ url: "", naslov: "", fajl: "", bajtova: 0 }]),
+    }));
   }
   function ukloniVideo(idx) {
-    setVideoGreska(null);
+    setVideoGreska("");
+    setFokusIdx(-1);
     setForm((prev) => {
       const next = (prev.videos || []).slice();
       next.splice(idx, 1);
-      return { ...prev, videos: next.length ? next : [{ url: "", naslov: "" }] };
+      return { ...prev, videos: next };
     });
   }
 
@@ -2340,66 +2390,91 @@ function RecipeFormModal({ form, setForm, onSave, onCancel, knownCategories, cje
         <div style={{ marginBottom: 14 }}>
           <label style={labelStyle}>Video</label>
           <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoSelected} style={{ display: "none" }} />
-          {(form.videos || []).map((v, i) => {
-            const otpremaSe = videoRed === i;
-            const greskaOvdje = videoGreska && videoGreska.red === i ? videoGreska.poruka : "";
-            return (
-              <div key={i} style={{ border: "1px solid #E7E3D8", borderRadius: 10, padding: 10, marginBottom: 8, background: "#FBFAF7" }}>
+
+          {(form.videos || []).map((v, i) => (
+            <div key={i} style={{ border: "1px solid #E7E3D8", borderRadius: 10, padding: "10px 11px", marginBottom: 8, background: "#FBFAF7" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 24, height: 24, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto", background: v.fajl ? "#E8E4D9" : "#0F222B", color: v.fajl ? "#0F222B" : "#fff" }}>
+                  {v.fajl ? uploadIcon() : playIcon()}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: "#8A8578" }}>
+                  {oznakaVidea(v)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => ukloniVideo(i)}
+                  aria-label="Ukloni ovaj snimak"
+                  style={{ marginLeft: "auto", border: "none", background: "none", color: "#8A8578", fontSize: 17, lineHeight: 1, cursor: "pointer", padding: "2px 5px", borderRadius: 6, fontFamily: "inherit" }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {v.fajl ? (
+                <div style={{ marginTop: 8, fontSize: 13.5, color: "#0F222B", wordBreak: "break-all" }}>
+                  {v.fajl}
+                  <span style={{ color: "#8A8578", fontSize: 12.5 }}>
+                    {veliMB(v.bajtova) ? " · " + veliMB(v.bajtova) : ""} · otpremljeno
+                  </span>
+                </div>
+              ) : (
                 <input
                   type="text"
                   value={v.url || ""}
                   onChange={(e) => updateVideo(i, "url", e.target.value)}
-                  placeholder="https://... (ili otpremi ispod)"
-                  style={inputStyle}
+                  placeholder="https://..."
+                  autoFocus={i === fokusIdx}
+                  style={{ ...inputStyle, marginTop: 8 }}
                 />
-                <input
-                  type="text"
-                  value={v.naslov || ""}
-                  onChange={(e) => updateVideo(i, "naslov", e.target.value)}
-                  placeholder="Naziv, npr. „Moje uputstvo” (opciono)"
-                  style={{ ...inputStyle, marginTop: 6 }}
-                />
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    onClick={() => otvoriIzborVidea(i)}
-                    disabled={videoRed !== null}
-                    style={{ background: "#F0EDE4", color: "#0F222B", border: "none", borderRadius: 9, padding: "8px 12px", fontWeight: 600, fontSize: 13, cursor: videoRed !== null ? "default" : "pointer", fontFamily: "inherit", opacity: videoRed !== null ? 0.7 : 1, display: "flex", alignItems: "center", gap: 6 }}
-                  >
-                    {uploadIcon()} {otpremaSe ? "Otpremanje " + videoProgress + "%" : "Otpremi video"}
-                  </button>
-                  {videoRed === null && ((form.videos || []).length > 1 || v.url || v.naslov) && (
-                    <button
-                      type="button"
-                      onClick={() => ukloniVideo(i)}
-                      style={{ background: "none", color: "#8A8578", border: "none", padding: "8px 2px", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
-                    >
-                      Ukloni
-                    </button>
-                  )}
-                </div>
-                {otpremaSe && (
-                  <div style={{ height: 4, borderRadius: 4, background: "#E7E3D8", marginTop: 8, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: videoProgress + "%", background: "#0F222B", transition: "width .2s" }} />
-                  </div>
-                )}
-                {greskaOvdje && <div style={{ color: "#B3413E", fontSize: 12.5, marginTop: 6 }}>{greskaOvdje}</div>}
+              )}
+
+              <input
+                type="text"
+                value={v.naslov || ""}
+                onChange={(e) => updateVideo(i, "naslov", e.target.value)}
+                placeholder="Naziv (opciono)"
+                style={{ ...inputStyle, marginTop: 8 }}
+              />
+            </div>
+          ))}
+
+          {videoOtprema && (
+            <div style={{ border: "1px solid #E7E3D8", borderRadius: 10, padding: "10px 11px", marginBottom: 8, background: "#FBFAF7" }}>
+              <div style={{ fontSize: 13.5, color: "#0F222B", wordBreak: "break-all" }}>
+                {videoIme}
+                <span style={{ color: "#8A8578", fontSize: 12.5 }}> · otpremanje {videoProgress}%</span>
               </div>
-            );
-          })}
-          <button
-            type="button"
-            onClick={dodajVideo}
-            disabled={videoRed !== null}
-            style={{ background: "none", color: "#0F222B", border: "1px dashed #CFC8B8", borderRadius: 9, padding: "8px 12px", fontWeight: 600, fontSize: 13, cursor: videoRed !== null ? "default" : "pointer", fontFamily: "inherit", opacity: videoRed !== null ? 0.6 : 1 }}
-          >
-            + Dodaj još jedan video
-          </button>
+              <div style={{ height: 4, borderRadius: 4, background: "#E7E3D8", marginTop: 8, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: videoProgress + "%", background: "#0F222B", transition: "width .2s" }} />
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={dodajLinkVidea}
+              disabled={videoOtprema}
+              style={{ flex: "1 1 auto", justifyContent: "center", background: "#F0EDE4", color: "#0F222B", border: "none", borderRadius: 9, padding: "9px 12px", fontWeight: 600, fontSize: 13, cursor: videoOtprema ? "default" : "pointer", fontFamily: "inherit", opacity: videoOtprema ? 0.6 : 1, display: "flex", alignItems: "center", gap: 6 }}
+            >
+              + Zalijepi link
+            </button>
+            <button
+              type="button"
+              onClick={otpremiNoviSnimak}
+              disabled={videoOtprema}
+              style={{ flex: "1 1 auto", justifyContent: "center", background: "#F0EDE4", color: "#0F222B", border: "none", borderRadius: 9, padding: "9px 12px", fontWeight: 600, fontSize: 13, cursor: videoOtprema ? "default" : "pointer", fontFamily: "inherit", opacity: videoOtprema ? 0.6 : 1, display: "flex", alignItems: "center", gap: 6 }}
+            >
+              {uploadIcon()} + Otpremi snimak
+            </button>
+          </div>
+
+          {videoGreska && <div style={{ color: "#B3413E", fontSize: 12.5, marginTop: 8 }}>{videoGreska}</div>}
+
           <div style={{ color: "#8A8578", fontSize: 12, marginTop: 8, lineHeight: 1.45 }}>
-            Recept može imati više snimaka — npr. tuđi sa YouTube-a i svoj, otpremljen. Prikazuju se
-            jedan ispod drugog, istim redom. Otpremljen snimak, YouTube i Vimeo se puštaju u samom
-            receptu; Facebook, Instagram i OneDrive ne dozvoljavaju puštanje na tuđoj stranici, pa se
-            takav link otvara kod njih.
+            Recept može imati više snimaka — prikazuju se jedan ispod drugog, istim redom. Otpremljen
+            snimak, YouTube i Vimeo se puštaju u samom receptu; Facebook, Instagram i OneDrive ne
+            dozvoljavaju puštanje na tuđoj stranici, pa se takav link otvara kod njih.
           </div>
         </div>
 
